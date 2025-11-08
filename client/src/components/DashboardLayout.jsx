@@ -1,4 +1,4 @@
-import { Home, Users, FileText, CreditCard, Settings, BarChart3, Bell, LogOut, Menu, X, ClipboardCheck, Shield } from 'lucide-react';
+import { Home, Users, FileText, CreditCard, Settings, BarChart3, Bell, LogOut, Menu, X, ClipboardCheck, Shield, MapPin, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ export default function DashboardLayout({
   role = 'user' 
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { user, logout } = useUser();
 
   const superAdminMenuItems = [
@@ -130,8 +130,29 @@ export default function DashboardLayout({
           >
             <Menu className="h-5 w-5" />
           </Button>
-          <div className="flex items-center gap-4 ml-auto">
-            <Button variant="ghost" size="icon" data-testid="button-notifications">
+          <div className="flex items-center gap-2 ml-auto">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              data-testid="button-map" 
+              title="View Map"
+              className="hover:bg-accent"
+              onClick={() => setLocation('/map')}
+            >
+              <MapPin className="h-5 w-5" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              data-testid="button-register-map" 
+              title="Register in Map"
+              className="hover:bg-accent"
+              onClick={() => setLocation('/map?register=true')}
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              Register in Map
+            </Button>
+            <Button variant="ghost" size="icon" data-testid="button-notifications" title="Notifications">
               <Bell className="h-5 w-5" />
             </Button>
             <ThemeToggle />

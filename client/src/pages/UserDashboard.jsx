@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Users, FileText, CreditCard, TrendingUp } from 'lucide-react';
+import { Users, FileText, CreditCard, TrendingUp, MapPin } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import DashboardMetricCard from '@/components/DashboardMetricCard';
 import UserProfileForm from '@/components/UserProfileForm';
 import DocumentUpload from '@/components/DocumentUpload';
+import MapView from '@/components/MapView';
 import { useUser } from '@/contexts/UserContext';
 
 export default function UserDashboard() {
@@ -82,6 +83,9 @@ export default function UserDashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <UserProfileForm />
           <DocumentUpload />
+        </div>
+        <div className="mt-8">
+          <MapView />
         </div>
       </div>
     </DashboardLayout>

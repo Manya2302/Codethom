@@ -1,4 +1,4 @@
-import { User, Document, Transaction, Notification, OTP, Verification } from "../shared/schema.js";
+import { User, Document, Transaction, Notification, OTP, Verification, Map } from "../shared/schema.js";
 import bcrypt from "bcryptjs";
 
 export class MongoStorage {
@@ -157,6 +157,45 @@ export class MongoStorage {
 
   async deleteVerification(id) {
     return await Verification.findByIdAndDelete(id);
+  }
+
+  // Map methods
+  async createMapRegistration(mapData) {
+    // Check if user already registered, if yes, update instead
+    const existing = await Map.findOne({ userId: mapData.userId });
+    if (existing) {
+      return await Map.findByIdAndUpdate(
+        existing._id,
+        { ...mapData, updatedAt: Date.now() },
+        { new: true }
+      );
+    }
+    const mapRegistration = new Map(mapData);
+    return await mapRegistration.save();
+  }
+
+  async getMapRegistrationByUser(userId) {
+    return await Map.findOne({ userId });
+  }
+
+  async getAllMapRegistrations(filters = {}) {
+    return await Map.find(filters).sort({ createdAt: -1 });
+  }
+
+  async getMapRegistrationsByPincode(pincode) {
+    return await Map.find({ pincode });
+  }
+
+  async updateMapRegistration(userId, updates) {
+    return await Map.findOneAndUpdate(
+      { userId },
+      { ...updates, updatedAt: Date.now() },
+      { new: true }
+    );
+  }
+
+  async deleteMapRegistration(userId) {
+    return await Map.findOneAndDelete({ userId });
   }
 }
 

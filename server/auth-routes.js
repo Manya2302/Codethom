@@ -628,4 +628,39 @@ router.get('/auth/google/callback', (req, res) => {
   });
 });
 
+// Get users with pincode for map display
+router.get('/auth/users-with-pincode', async (req, res) => {
+  try {
+    // Get all users
+    const allUsers = await storage.getAllUsers();
+    
+    // Filter users with investor, vendor, or broker roles that have pincode
+    const users = allUsers.filter(user => 
+      ['investor', 'vendor', 'broker'].includes(user.role) &&
+      user.pincode &&
+      user.pincode.trim() !== ''
+    );
+
+    // Format users for map display
+    const formattedUsers = users.map(user => ({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      pincode: user.pincode,
+      locality: user.locality,
+      latitude: user.latitude,
+      longitude: user.longitude,
+      streetAddress: user.streetAddress,
+      phone: user.phone,
+      company: user.company
+    }));
+
+    res.json(formattedUsers);
+  } catch (error) {
+    console.error('Error fetching users with pincode:', error);
+    res.status(500).json({ message: 'Failed to fetch users' });
+  }
+});
+
 export default router;

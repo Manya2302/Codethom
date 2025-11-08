@@ -14,7 +14,9 @@ export function UserProvider({ children }) {
 
   const fetchCurrentUser = async () => {
     try {
-      const response = await fetch('/api/auth/me');
+      const response = await fetch('/api/auth/me', {
+        credentials: 'include'
+      });
       if (response.ok) {
         const data = await response.json();
         setUser(data.user);
@@ -31,7 +33,10 @@ export function UserProvider({ children }) {
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/signout', { method: 'POST' });
+      await fetch('/api/auth/signout', { 
+        method: 'POST',
+        credentials: 'include'
+      });
       setUser(null);
       setLocation('/signin');
     } catch (error) {

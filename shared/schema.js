@@ -14,6 +14,11 @@ const userSchema = new mongoose.Schema({
   avatar: String,
   phone: String,
   company: String,
+  pincode: String,
+  locality: String,
+  latitude: Number,
+  longitude: Number,
+  streetAddress: String,
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
@@ -77,6 +82,21 @@ const verificationSchema = new mongoose.Schema({
   reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 });
 
+// Map Registration Schema - stores user locations on map
+const mapSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+  name: { type: String, required: true },
+  email: { type: String, required: true },
+  role: { type: String, required: true },
+  address: { type: String, required: true },
+  pincode: { type: String, required: true },
+  locality: String,
+  latitude: { type: Number, required: true },
+  longitude: { type: Number, required: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
 // Create and export models
 export const User = mongoose.model('User', userSchema);
 export const OTP = mongoose.model('OTP', otpSchema);
@@ -84,3 +104,4 @@ export const Document = mongoose.model('Document', documentSchema);
 export const Transaction = mongoose.model('Transaction', transactionSchema);
 export const Notification = mongoose.model('Notification', notificationSchema);
 export const Verification = mongoose.model('Verification', verificationSchema);
+export const Map = mongoose.model('Map', mapSchema);

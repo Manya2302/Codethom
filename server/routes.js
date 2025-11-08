@@ -426,6 +426,165 @@ export async function registerRoutes(app) {
     }
   });
 
+  // Map registration routes
+  // Check if user is registered in map
+  app.get('/api/map/check-registration', requireAuth, async (req, res) => {
+    try {
+      const mapRegistration = await storage.getMapRegistrationByUser(req.session.userId);
+      res.json({ registered: !!mapRegistration, data: mapRegistration });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Register user in map
+  app.post('/api/map/register', requireAuth, async (req, res) => {
+    try {
+      const { address, pincode, locality, latitude, longitude } = req.body;
+
+      if (!address || !pincode || !latitude || !longitude) {
+        return res.status(400).json({ message: 'Address, pincode, latitude, and longitude are required' });
+      }
+
+      // Get user details
+      const user = await storage.getUser(req.session.userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Create or update map registration
+      const mapRegistration = await storage.createMapRegistration({
+        userId: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        address,
+        pincode,
+        locality: locality || '',
+        latitude: parseFloat(latitude),
+        longitude: parseFloat(longitude)
+      });
+
+      res.json({ 
+        message: 'Successfully registered on map',
+        data: mapRegistration 
+      });
+    } catch (error) {
+      console.error('Error registering user on map:', error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get all map registrations (for displaying on map)
+  app.get('/api/map/registrations', async (req, res) => {
+    try {
+      const { pincode } = req.query;
+      let registrations;
+      
+      if (pincode) {
+        registrations = await storage.getMapRegistrationsByPincode(pincode);
+      } else {
+        registrations = await storage.getAllMapRegistrations();
+      }
+
+      res.json(registrations);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Reverse geocoding - get address and pincode from coordinates
+  app.get('/api/map/reverse-geocode', async (req, res) => {
+    try {
+      const { lat, lng } = req.query;
+      
+      if (!lat || !lng) {
+        return res.status(400).json({ message: 'Latitude and longitude are required' });
+      }
+
+      // Validate coordinates
+      const latitude = parseFloat(lat);
+      const longitude = parseFloat(lng);
+      
+      if (isNaN(latitude) || isNaN(longitude)) {
+        return res.status(400).json({ message: 'Invalid coordinates' });
+      }
+
+      // Use Nominatim (OpenStreetMap) reverse geocoding API
+      // Add delay to respect rate limits (1 request per second)
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1&zoom=18`,
+        {
+          headers: {
+            'User-Agent': 'TerriSmart/1.0 (contact@terrismart.com)',
+            'Accept': 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9'
+          }
+        }
+      );
+
+      // Check response status first
+      if (!response.ok) {
+        let errorMessage = 'Failed to fetch address from coordinates. Please enter manually.';
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorMessage;
+          } else {
+            const errorText = await response.text();
+            console.error('Nominatim error (non-JSON):', errorText.substring(0, 500));
+          }
+        } catch (e) {
+          console.error('Error reading error response:', e);
+        }
+        return res.status(response.status).json({ 
+          message: errorMessage 
+        });
+      }
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Nominatim returned non-JSON:', text.substring(0, 500));
+        return res.status(500).json({ 
+          message: 'Geocoding service returned invalid response. Please enter address manually.' 
+        });
+      }
+
+      const data = await response.json();
+      
+      // Check if we got valid data
+      if (!data || data.error) {
+        console.error('Nominatim API error:', data.error || 'Unknown error');
+        return res.status(500).json({ 
+          message: 'Could not find address for these coordinates. Please enter manually.' 
+        });
+      }
+      
+      // Extract address components
+      const address = data.display_name || '';
+      const addressParts = data.address || {};
+      const pincode = addressParts.postcode || '';
+      const locality = addressParts.suburb || addressParts.neighbourhood || addressParts.city_district || '';
+      const city = addressParts.city || addressParts.town || addressParts.village || '';
+
+      res.json({
+        address,
+        pincode,
+        locality: locality || city,
+        city
+      });
+    } catch (error) {
+      console.error('Reverse geocoding error:', error);
+      res.status(500).json({ 
+        message: 'Failed to get address from coordinates. Please enter manually.',
+        error: error.message 
+      });
+    }
+  });
+
   // Admin analytics route (admin only) - returns detailed analytics data
   app.get('/api/admin/analytics', requireAdmin, async (req, res) => {
     try {

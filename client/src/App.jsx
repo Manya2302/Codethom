@@ -24,6 +24,7 @@ import InvestorDashboard from "@/pages/InvestorDashboard";
 import VendorDashboard from "@/pages/VendorDashboard";
 import BrokerDashboard from "@/pages/BrokerDashboard";
 import Payment from "@/pages/Payment";
+import MapViewPage from "@/pages/MapViewPage";
 
 function Router() {
   return (
@@ -46,6 +47,7 @@ function Router() {
       <Route path="/admin/verifications" component={AdminVerifications} />
       <Route path="/partner/dashboard" component={PartnerDashboard} />
       <Route path="/payment" component={Payment} />
+      <Route path="/map" component={MapViewPage} />
       <Route component={NotFound} />
     </Switch>
   );
