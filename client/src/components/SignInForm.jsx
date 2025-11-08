@@ -68,7 +68,9 @@ export default function SignInForm() {
       const role = result.user?.role;
       let dashboardPath = '/dashboard';
       
-      if (role === 'admin') {
+      if (role === 'superadmin') {
+        dashboardPath = '/superadmin/dashboard';
+      } else if (role === 'admin') {
         dashboardPath = '/admin/dashboard';
       } else if (role === 'partner') {
         dashboardPath = '/partner/dashboard';

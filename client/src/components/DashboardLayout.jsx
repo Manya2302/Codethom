@@ -1,4 +1,4 @@
-import { Home, Users, FileText, CreditCard, Settings, BarChart3, Bell, LogOut, Menu, X, ClipboardCheck } from 'lucide-react';
+import { Home, Users, FileText, CreditCard, Settings, BarChart3, Bell, LogOut, Menu, X, ClipboardCheck, Shield } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,14 @@ export default function DashboardLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [location] = useLocation();
   const { user, logout } = useUser();
+
+  const superAdminMenuItems = [
+    { icon: Home, label: 'Dashboard', path: '/superadmin/dashboard' },
+    { icon: Shield, label: 'Admins', path: '/superadmin/admins' },
+    { icon: Users, label: 'All Users', path: '/superadmin/users' },
+    { icon: BarChart3, label: 'Analytics', path: '/superadmin/analytics' },
+    { icon: Settings, label: 'Settings', path: '/superadmin/settings' },
+  ];
 
   const adminMenuItems = [
     { icon: Home, label: 'Dashboard', path: '/admin/dashboard' },
@@ -38,7 +46,7 @@ export default function DashboardLayout({
     { icon: Settings, label: 'Settings', path: '/partner/settings' },
   ];
 
-  const menuItems = role === 'admin' ? adminMenuItems : role === 'partner' ? partnerMenuItems : userMenuItems;
+  const menuItems = role === 'superadmin' ? superAdminMenuItems : role === 'admin' ? adminMenuItems : role === 'partner' ? partnerMenuItems : userMenuItems;
 
   return (
     <div className="flex h-screen bg-background">
