@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Home, FileText, CreditCard, TrendingUp } from 'lucide-react';
+import { Home, FileText, CreditCard, TrendingUp, Map } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import DashboardMetricCard from '@/components/DashboardMetricCard';
 import { useUser } from '@/contexts/UserContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import AreaAnalytics from '@/components/AreaAnalytics';
 
 export default function CustomerDashboard() {
   const { user } = useUser();
@@ -54,51 +56,67 @@ export default function CustomerDashboard() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <DashboardMetricCard
-            title="Properties Viewed"
-            value="0"
-            change={0}
-            icon={<Home className="h-4 w-4" />}
-            data-testid="card-properties"
-          />
-          <DashboardMetricCard
-            title="Documents"
-            value={documents.length.toString()}
-            change={8.2}
-            icon={<FileText className="h-4 w-4" />}
-            data-testid="card-documents"
-          />
-          <DashboardMetricCard
-            title="Verified Docs"
-            value={verifiedDocs.toString()}
-            change={15.3}
-            icon={<FileText className="h-4 w-4" />}
-            data-testid="card-verified"
-          />
-          <DashboardMetricCard
-            title="Total Spent"
-            value={`$${totalSpent.toFixed(2)}`}
-            change={0}
-            icon={<CreditCard className="h-4 w-4" />}
-            data-testid="card-spent"
-          />
-        </div>
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="maps">
+              <Map className="h-4 w-4 mr-2" />
+              Maps & Area Analytics
+            </TabsTrigger>
+          </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Customer Features</CardTitle>
-            <CardDescription>
-              Your dashboard for property search and management
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">
-              As a verified customer, you can browse properties, save favorites, 
-              and manage your documentation. Start exploring properties in your area today!
-            </p>
-          </CardContent>
-        </Card>
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <DashboardMetricCard
+                title="Properties Viewed"
+                value="0"
+                change={0}
+                icon={<Home className="h-4 w-4" />}
+                data-testid="card-properties"
+              />
+              <DashboardMetricCard
+                title="Documents"
+                value={documents.length.toString()}
+                change={8.2}
+                icon={<FileText className="h-4 w-4" />}
+                data-testid="card-documents"
+              />
+              <DashboardMetricCard
+                title="Verified Docs"
+                value={verifiedDocs.toString()}
+                change={15.3}
+                icon={<FileText className="h-4 w-4" />}
+                data-testid="card-verified"
+              />
+              <DashboardMetricCard
+                title="Total Spent"
+                value={`$${totalSpent.toFixed(2)}`}
+                change={0}
+                icon={<CreditCard className="h-4 w-4" />}
+                data-testid="card-spent"
+              />
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Customer Features</CardTitle>
+                <CardDescription>
+                  Your dashboard for property search and management
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  As a verified customer, you can browse properties, save favorites, 
+                  and manage your documentation. Start exploring properties in your area today!
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="maps" className="space-y-6">
+            <AreaAnalytics />
+          </TabsContent>
+        </Tabs>
       </div>
     </DashboardLayout>
   );

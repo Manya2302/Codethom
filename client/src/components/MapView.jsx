@@ -54,7 +54,8 @@ const getMarkerIcon = (role) => {
   };
 };
 
-export default function MapView({ selectedPincode: externalSelectedPincode, onPincodeSelect, onMapClick }) {
+// Inner component that only renders when API key is available
+function MapViewInner({ selectedPincode: externalSelectedPincode, onPincodeSelect, onMapClick, apiKey }) {
   const [mapCenter, setMapCenter] = useState(defaultCenter);
   const [mapZoom, setMapZoom] = useState(12);
   const [users, setUsers] = useState([]);
@@ -68,10 +69,10 @@ export default function MapView({ selectedPincode: externalSelectedPincode, onPi
   // Use external selectedPincode if provided, otherwise use internal state
   const selectedPincode = externalSelectedPincode !== undefined ? externalSelectedPincode : internalSelectedPincode;
 
-  // Load Google Maps API
+  // Load Google Maps API with the provided key
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '', // You'll need to add this to .env
+    googleMapsApiKey: apiKey,
     libraries: libraries,
   });
 
@@ -499,4 +500,60 @@ export default function MapView({ selectedPincode: externalSelectedPincode, onPi
       </CardContent>
     </Card>
   );
+}
+
+// Wrapper component that fetches API key and conditionally renders map
+export default function MapView(props) {
+  const [apiKey, setApiKey] = useState(null);
+  
+  useEffect(() => {
+    fetch('/api/maps/config')
+      .then(res => res.json())
+      .then(data => {
+        if (data.apiKey) {
+          setApiKey(data.apiKey);
+        } else {
+          setApiKey(''); // Set to empty to prevent infinite loading
+        }
+      })
+      .catch(err => {
+        console.error('Error fetching Maps config:', err);
+        setApiKey(''); // Set to empty on error
+      });
+  }, []);
+
+  // Show loading state while fetching API key
+  if (apiKey === null) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Territory Map</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center p-8">
+            Loading Maps configuration...
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Show error if no API key available
+  if (!apiKey) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Territory Map</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center p-8 text-red-600">
+            Google Maps API key not configured. Please contact administrator.
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Render the map with the API key
+  return <MapViewInner {...props} apiKey={apiKey} />;
 }

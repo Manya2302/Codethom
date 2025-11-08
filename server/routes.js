@@ -791,6 +791,219 @@ export async function registerRoutes(app) {
     }
   });
 
+  // Get Google Maps configuration (without exposing API key)
+  app.get('/api/maps/config', (req, res) => {
+    res.json({
+      enabled: !!process.env.GOOGLE_MAPS_API_KEY,
+      apiKey: process.env.GOOGLE_MAPS_API_KEY || ''
+    });
+  });
+
+  // Fetch Places (POI) data for a pincode or location
+  app.get('/api/maps/places', async (req, res) => {
+    try {
+      const { pincode, lat, lng, radius = 5000, type } = req.query;
+      
+      if (!process.env.GOOGLE_MAPS_API_KEY) {
+        return res.status(503).json({ message: 'Google Maps API not configured' });
+      }
+
+      let location;
+      
+      // If pincode provided, geocode it first
+      if (pincode) {
+        const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(pincode + ', Ahmedabad, Gujarat, India')}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+        const geocodeResponse = await fetch(geocodeUrl);
+        const geocodeData = await geocodeResponse.json();
+        
+        if (geocodeData.status === 'OK' && geocodeData.results && geocodeData.results.length > 0) {
+          location = geocodeData.results[0].geometry.location;
+        } else {
+          return res.status(404).json({ message: 'Pincode not found' });
+        }
+      } else if (lat && lng) {
+        location = { lat: parseFloat(lat), lng: parseFloat(lng) };
+      } else {
+        return res.status(400).json({ message: 'Either pincode or lat/lng is required' });
+      }
+
+      // Define POI categories relevant to real estate
+      const categories = [
+        'hospital',
+        'school',
+        'restaurant', 
+        'shopping_mall',
+        'park',
+        'bus_station',
+        'train_station',
+        'gym',
+        'bank',
+        'police',
+        'fire_station',
+        'pharmacy',
+        'supermarket',
+        'cafe',
+        'movie_theater'
+      ];
+
+      const categoryToSearch = type || categories;
+      const placesData = {};
+
+      // If specific type requested, search only that
+      if (type && typeof type === 'string') {
+        const searchTypes = Array.isArray(categoryToSearch) ? categoryToSearch : [categoryToSearch];
+        
+        for (const placeType of searchTypes) {
+          const placesUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${location.lat},${location.lng}&radius=${radius}&type=${placeType}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+          
+          const placesResponse = await fetch(placesUrl);
+          const placesResult = await placesResponse.json();
+          
+          if (placesResult.status === 'OK') {
+            placesData[placeType] = placesResult.results.map(place => ({
+              name: place.name,
+              vicinity: place.vicinity,
+              location: place.geometry.location,
+              placeId: place.place_id,
+              rating: place.rating,
+              userRatingsTotal: place.user_ratings_total,
+              types: place.types,
+              businessStatus: place.business_status
+            }));
+          } else {
+            placesData[placeType] = [];
+          }
+        }
+      } else {
+        // Search all categories
+        for (const category of categories) {
+          const placesUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${location.lat},${location.lng}&radius=${radius}&type=${category}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+          
+          const placesResponse = await fetch(placesUrl);
+          const placesResult = await placesResponse.json();
+          
+          if (placesResult.status === 'OK') {
+            placesData[category] = placesResult.results.map(place => ({
+              name: place.name,
+              vicinity: place.vicinity,
+              location: place.geometry.location,
+              placeId: place.place_id,
+              rating: place.rating,
+              userRatingsTotal: place.user_ratings_total,
+              types: place.types,
+              businessStatus: place.business_status
+            }));
+          } else {
+            placesData[category] = [];
+          }
+          
+          // Add delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+      }
+
+      res.json({
+        location,
+        radius: parseInt(radius),
+        data: placesData
+      });
+    } catch (error) {
+      console.error('Error fetching places:', error);
+      res.status(500).json({ message: 'Failed to fetch places data', error: error.message });
+    }
+  });
+
+  // Get aggregated POI counts for a pincode
+  app.get('/api/maps/poi-summary', async (req, res) => {
+    try {
+      const { pincode, lat, lng, radius = 5000 } = req.query;
+      
+      if (!process.env.GOOGLE_MAPS_API_KEY) {
+        return res.status(503).json({ message: 'Google Maps API not configured' });
+      }
+
+      let location;
+      
+      // If pincode provided, geocode it first
+      if (pincode) {
+        const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(pincode + ', Ahmedabad, Gujarat, India')}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+        const geocodeResponse = await fetch(geocodeUrl);
+        const geocodeData = await geocodeResponse.json();
+        
+        if (geocodeData.status === 'OK' && geocodeData.results && geocodeData.results.length > 0) {
+          location = geocodeData.results[0].geometry.location;
+        } else {
+          return res.status(404).json({ message: 'Pincode not found' });
+        }
+      } else if (lat && lng) {
+        location = { lat: parseFloat(lat), lng: parseFloat(lng) };
+      } else {
+        return res.status(400).json({ message: 'Either pincode or lat/lng is required' });
+      }
+
+      // Define POI categories with display names and icons
+      const categories = [
+        { type: 'hospital', label: 'Hospitals', icon: '🏥' },
+        { type: 'school', label: 'Schools', icon: '🏫' },
+        { type: 'restaurant', label: 'Restaurants', icon: '🍽️' },
+        { type: 'shopping_mall', label: 'Shopping Malls', icon: '🛒' },
+        { type: 'park', label: 'Parks', icon: '🌳' },
+        { type: 'bus_station', label: 'Bus Stations', icon: '🚌' },
+        { type: 'train_station', label: 'Train Stations', icon: '🚆' },
+        { type: 'gym', label: 'Gyms', icon: '💪' },
+        { type: 'bank', label: 'Banks', icon: '🏦' },
+        { type: 'pharmacy', label: 'Pharmacies', icon: '💊' },
+        { type: 'supermarket', label: 'Supermarkets', icon: '🛍️' },
+        { type: 'cafe', label: 'Cafes', icon: '☕' },
+      ];
+
+      const summary = [];
+
+      for (const category of categories) {
+        const placesUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${location.lat},${location.lng}&radius=${radius}&type=${category.type}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+        
+        const placesResponse = await fetch(placesUrl);
+        const placesResult = await placesResponse.json();
+        
+        if (placesResult.status === 'OK') {
+          summary.push({
+            type: category.type,
+            label: category.label,
+            icon: category.icon,
+            count: placesResult.results.length,
+            places: placesResult.results.slice(0, 5).map(place => ({
+              name: place.name,
+              vicinity: place.vicinity,
+              location: place.geometry.location,
+              placeId: place.place_id,
+              rating: place.rating
+            }))
+          });
+        } else {
+          summary.push({
+            type: category.type,
+            label: category.label,
+            icon: category.icon,
+            count: 0,
+            places: []
+          });
+        }
+        
+        // Add delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 150));
+      }
+
+      res.json({
+        location,
+        radius: parseInt(radius),
+        summary
+      });
+    } catch (error) {
+      console.error('Error fetching POI summary:', error);
+      res.status(500).json({ message: 'Failed to fetch POI summary', error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   // Setup Socket.IO for real-time notifications

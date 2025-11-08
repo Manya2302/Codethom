@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Building2, FileText, Users, TrendingUp, CheckCircle2 } from 'lucide-react';
+import { Building2, FileText, Users, TrendingUp, CheckCircle2, Map } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import DashboardMetricCard from '@/components/DashboardMetricCard';
 import { useUser } from '@/contexts/UserContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import AreaAnalytics from '@/components/AreaAnalytics';
 
 export default function VendorDashboard() {
   const { user } = useUser();
@@ -65,52 +67,68 @@ export default function VendorDashboard() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <DashboardMetricCard
-            title="Active Listings"
-            value="0"
-            change={0}
-            icon={<Building2 className="h-4 w-4" />}
-            data-testid="card-listings"
-          />
-          <DashboardMetricCard
-            title="Total Revenue"
-            value={`$${totalRevenue.toFixed(2)}`}
-            change={8.3}
-            icon={<TrendingUp className="h-4 w-4" />}
-            data-testid="card-revenue"
-          />
-          <DashboardMetricCard
-            title="Inquiries"
-            value="0"
-            change={0}
-            icon={<Users className="h-4 w-4" />}
-            data-testid="card-inquiries"
-          />
-          <DashboardMetricCard
-            title="Documents"
-            value={documents.length.toString()}
-            change={5.2}
-            icon={<FileText className="h-4 w-4" />}
-            data-testid="card-documents"
-          />
-        </div>
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="maps">
+              <Map className="h-4 w-4 mr-2" />
+              Maps & Area Analytics
+            </TabsTrigger>
+          </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Vendor Features</CardTitle>
-            <CardDescription>
-              Your property management dashboard
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">
-              As a RERA-verified vendor, you can list properties, manage inquiries, 
-              and connect with potential buyers. Your verified status gives customers 
-              confidence in your listings.
-            </p>
-          </CardContent>
-        </Card>
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <DashboardMetricCard
+                title="Active Listings"
+                value="0"
+                change={0}
+                icon={<Building2 className="h-4 w-4" />}
+                data-testid="card-listings"
+              />
+              <DashboardMetricCard
+                title="Total Revenue"
+                value={`$${totalRevenue.toFixed(2)}`}
+                change={8.3}
+                icon={<TrendingUp className="h-4 w-4" />}
+                data-testid="card-revenue"
+              />
+              <DashboardMetricCard
+                title="Inquiries"
+                value="0"
+                change={0}
+                icon={<Users className="h-4 w-4" />}
+                data-testid="card-inquiries"
+              />
+              <DashboardMetricCard
+                title="Documents"
+                value={documents.length.toString()}
+                change={5.2}
+                icon={<FileText className="h-4 w-4" />}
+                data-testid="card-documents"
+              />
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Vendor Features</CardTitle>
+                <CardDescription>
+                  Your property management dashboard
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  As a RERA-verified vendor, you can list properties, manage inquiries, 
+                  and connect with potential buyers. Your verified status gives customers 
+                  confidence in your listings.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="maps" className="space-y-6">
+            <AreaAnalytics />
+          </TabsContent>
+        </Tabs>
       </div>
     </DashboardLayout>
   );

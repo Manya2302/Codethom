@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { TrendingUp, FileText, CreditCard, BarChart3 } from 'lucide-react';
+import { TrendingUp, FileText, CreditCard, BarChart3, Map } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import DashboardMetricCard from '@/components/DashboardMetricCard';
 import { useUser } from '@/contexts/UserContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import AreaAnalytics from '@/components/AreaAnalytics';
 
 export default function InvestorDashboard() {
   const { user } = useUser();
@@ -53,52 +55,68 @@ export default function InvestorDashboard() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <DashboardMetricCard
-            title="Active Investments"
-            value="0"
-            change={0}
-            icon={<TrendingUp className="h-4 w-4" />}
-            data-testid="card-investments"
-          />
-          <DashboardMetricCard
-            title="Portfolio Value"
-            value={`$${totalInvested.toFixed(2)}`}
-            change={12.5}
-            icon={<BarChart3 className="h-4 w-4" />}
-            data-testid="card-portfolio"
-          />
-          <DashboardMetricCard
-            title="Documents"
-            value={documents.length.toString()}
-            change={5.1}
-            icon={<FileText className="h-4 w-4" />}
-            data-testid="card-documents"
-          />
-          <DashboardMetricCard
-            title="ROI"
-            value="0%"
-            change={0}
-            icon={<TrendingUp className="h-4 w-4" />}
-            data-testid="card-roi"
-          />
-        </div>
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="maps">
+              <Map className="h-4 w-4 mr-2" />
+              Maps & Area Analytics
+            </TabsTrigger>
+          </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Investor Features</CardTitle>
-            <CardDescription>
-              Your investment management dashboard
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">
-              As a verified investor, you have access to exclusive investment opportunities, 
-              detailed analytics, and portfolio management tools. Start building your real estate 
-              portfolio today!
-            </p>
-          </CardContent>
-        </Card>
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <DashboardMetricCard
+                title="Active Investments"
+                value="0"
+                change={0}
+                icon={<TrendingUp className="h-4 w-4" />}
+                data-testid="card-investments"
+              />
+              <DashboardMetricCard
+                title="Portfolio Value"
+                value={`$${totalInvested.toFixed(2)}`}
+                change={12.5}
+                icon={<BarChart3 className="h-4 w-4" />}
+                data-testid="card-portfolio"
+              />
+              <DashboardMetricCard
+                title="Documents"
+                value={documents.length.toString()}
+                change={5.1}
+                icon={<FileText className="h-4 w-4" />}
+                data-testid="card-documents"
+              />
+              <DashboardMetricCard
+                title="ROI"
+                value="0%"
+                change={0}
+                icon={<TrendingUp className="h-4 w-4" />}
+                data-testid="card-roi"
+              />
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Investor Features</CardTitle>
+                <CardDescription>
+                  Your investment management dashboard
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  As a verified investor, you have access to exclusive investment opportunities, 
+                  detailed analytics, and portfolio management tools. Start building your real estate 
+                  portfolio today!
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="maps" className="space-y-6">
+            <AreaAnalytics />
+          </TabsContent>
+        </Tabs>
       </div>
     </DashboardLayout>
   );
