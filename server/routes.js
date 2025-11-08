@@ -320,6 +320,84 @@ export async function registerRoutes(app) {
     }
   });
 
+  // Super Admin routes (superadmin only)
+  app.get('/api/superadmin/users/by-role', requireSuperAdmin, async (req, res) => {
+    try {
+      const { role } = req.query;
+      const filters = role ? { role } : {};
+      const users = await storage.getAllUsers(filters);
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get('/api/superadmin/stats', requireSuperAdmin, async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      const totalUsers = users.length;
+      const activeUsers = users.filter(u => u.status === 'active').length;
+      
+      // Count users by role
+      const admins = users.filter(u => u.role === 'admin').length;
+      const vendors = users.filter(u => u.role === 'vendor').length;
+      const customers = users.filter(u => u.role === 'customer').length;
+      const brokers = users.filter(u => u.role === 'broker').length;
+      const investors = users.filter(u => u.role === 'investor').length;
+      
+      // Get all transactions to calculate revenue
+      let totalRevenue = 0;
+      for (const user of users) {
+        const transactions = await storage.getTransactionsByUser(user._id);
+        const userRevenue = transactions
+          .filter(t => t.status === 'completed')
+          .reduce((sum, t) => sum + t.amount, 0);
+        totalRevenue += userRevenue;
+      }
+
+      res.json({
+        totalUsers,
+        activeUsers,
+        revenue: totalRevenue,
+        growthRate: activeUsers > 0 ? ((activeUsers / totalUsers) * 100).toFixed(1) : 0,
+        usersByRole: {
+          admins,
+          vendors,
+          customers,
+          brokers,
+          investors
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post('/api/superadmin/create-admin', requireSuperAdmin, async (req, res) => {
+    try {
+      const { email, role } = req.body;
+
+      if (!email || !role) {
+        return res.status(400).json({ message: 'Email and role are required' });
+      }
+
+      const validAdminRoles = ['admin', 'superadmin'];
+      if (!validAdminRoles.includes(role)) {
+        return res.status(400).json({ message: 'Invalid role. Must be admin or superadmin' });
+      }
+
+      const existingUser = await storage.getUserByEmail(email);
+      if (!existingUser) {
+        return res.status(404).json({ message: 'User not found. User must sign up first.' });
+      }
+
+      const updatedUser = await storage.updateUser(existingUser._id, { role, status: 'active', verified: true });
+      res.json({ message: `${role} role assigned successfully`, user: updatedUser });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Admin stats route (admin only)
   app.get('/api/admin/stats', requireAdmin, async (req, res) => {
     try {
