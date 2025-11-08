@@ -20,8 +20,25 @@ const requireAdmin = async (req, res, next) => {
   
   try {
     const user = await storage.getUser(req.session.userId);
-    if (!user || user.role !== 'admin') {
+    if (!user || (user.role !== 'admin' && user.role !== 'superadmin')) {
       return res.status(403).json({ message: 'Admin access required' });
+    }
+    next();
+  } catch (error) {
+    res.status(500).json({ message: 'Authorization check failed' });
+  }
+};
+
+// Super Admin authorization middleware
+const requireSuperAdmin = async (req, res, next) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+  
+  try {
+    const user = await storage.getUser(req.session.userId);
+    if (!user || user.role !== 'superadmin') {
+      return res.status(403).json({ message: 'Super Admin access required' });
     }
     next();
   } catch (error) {
