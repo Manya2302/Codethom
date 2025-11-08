@@ -14,6 +14,8 @@ import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import UserDashboard from "@/pages/UserDashboard";
 import AdminDashboard from "@/pages/AdminDashboard";
+import AdminUsers from "@/pages/AdminUsers";
+import AdminAnalytics from "@/pages/AdminAnalytics";
 import SuperAdminDashboard from "@/pages/SuperAdminDashboard";
 import AdminVerifications from "@/pages/AdminVerifications";
 import PartnerDashboard from "@/pages/PartnerDashboard";
@@ -39,6 +41,8 @@ function Router() {
       <Route path="/dashboard/broker" component={BrokerDashboard} />
       <Route path="/superadmin/dashboard" component={SuperAdminDashboard} />
       <Route path="/admin/dashboard" component={AdminDashboard} />
+      <Route path="/admin/users" component={AdminUsers} />
+      <Route path="/admin/analytics" component={AdminAnalytics} />
       <Route path="/admin/verifications" component={AdminVerifications} />
       <Route path="/partner/dashboard" component={PartnerDashboard} />
       <Route path="/payment" component={Payment} />

@@ -426,6 +426,88 @@ export async function registerRoutes(app) {
     }
   });
 
+  // Admin analytics route (admin only) - returns detailed analytics data
+  app.get('/api/admin/analytics', requireAdmin, async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      
+      // User distribution by role
+      const userDistribution = {
+        customer: users.filter(u => u.role === 'customer').length,
+        vendor: users.filter(u => u.role === 'vendor').length,
+        broker: users.filter(u => u.role === 'broker').length,
+        investor: users.filter(u => u.role === 'investor').length,
+        admin: users.filter(u => u.role === 'admin').length,
+      };
+
+      // User growth over time (last 12 months)
+      const now = new Date();
+      const userGrowth = [];
+      for (let i = 11; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+        const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+        
+        const usersInMonth = users.filter(u => {
+          const userDate = u.createdAt ? new Date(u.createdAt) : new Date();
+          return userDate >= monthStart && userDate <= monthEnd;
+        }).length;
+        
+        userGrowth.push({
+          month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          users: usersInMonth,
+          cumulative: users.filter(u => {
+            const userDate = u.createdAt ? new Date(u.createdAt) : new Date();
+            return userDate <= monthEnd;
+          }).length
+        });
+      }
+
+      // Revenue trends (last 12 months)
+      const revenueTrends = [];
+      for (let i = 11; i >= 0; i--) {
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+        const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+        
+        let monthRevenue = 0;
+        for (const user of users) {
+          const transactions = await storage.getTransactionsByUser(user._id);
+          const userMonthRevenue = transactions
+            .filter(t => {
+              const transDate = t.createdAt ? new Date(t.createdAt) : new Date();
+              return t.status === 'completed' && transDate >= monthStart && transDate <= monthEnd;
+            })
+            .reduce((sum, t) => sum + t.amount, 0);
+          monthRevenue += userMonthRevenue;
+        }
+        
+        revenueTrends.push({
+          month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          revenue: monthRevenue
+        });
+      }
+
+      // Activity trends (users by status)
+      const activityTrends = {
+        active: users.filter(u => u.status === 'active').length,
+        inactive: users.filter(u => u.status === 'inactive').length,
+        pending: users.filter(u => u.status === 'pending').length,
+        verified: users.filter(u => u.verified || u.isEmailVerified).length,
+        unverified: users.filter(u => !u.verified && !u.isEmailVerified).length,
+      };
+
+      res.json({
+        userDistribution,
+        userGrowth,
+        revenueTrends,
+        activityTrends
+      });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   // Setup Socket.IO for real-time notifications

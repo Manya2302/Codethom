@@ -1,13 +1,30 @@
 import nodemailer from 'nodemailer';
 
+const smtpPort = parseInt(process.env.SMTP_PORT || '587');
+const isSecure = smtpPort === 465;
+
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: process.env.SMTP_PORT === '465',
+  port: smtpPort,
+  secure: isSecure,
+  requireTLS: !isSecure && smtpPort === 587, // Gmail requires TLS on port 587
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASSWORD,
   },
+  tls: {
+    rejectUnauthorized: false, // Allow self-signed certificates if needed
+  },
+});
+
+// Verify transporter configuration on startup
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('❌ SMTP configuration error:', error.message);
+    console.error('Please check your SMTP credentials in .env file');
+  } else {
+    console.log('✅ SMTP server is ready to send emails');
+  }
 });
 
 export async function sendOTPEmail(email, otpCode, type = 'signup') {
@@ -58,16 +75,27 @@ export async function sendOTPEmail(email, otpCode, type = 'signup') {
   `;
 
   try {
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASSWORD) {
+      console.error('❌ SMTP configuration missing. Please check your .env file.');
+      return false;
+    }
+
     await transporter.sendMail({
-      from: `"Real Estate Platform" <${process.env.SMTP_FROM_EMAIL}>`,
+      from: `"Real Estate Platform" <${process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER}>`,
       to: email,
       subject: subject,
       html: htmlContent,
     });
-    console.log(`OTP email sent successfully to ${email}`);
+    console.log(`✅ OTP email sent successfully to ${email}`);
     return true;
   } catch (error) {
-    console.error('Error sending OTP email:', error);
+    console.error('❌ Error sending OTP email:', error.message);
+    if (error.response) {
+      console.error('SMTP Response:', error.response);
+    }
+    if (error.code) {
+      console.error('Error Code:', error.code);
+    }
     return false;
   }
 }
