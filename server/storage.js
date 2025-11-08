@@ -12,12 +12,17 @@ export class MongoStorage {
   }
 
   async createUser(userData, skipPasswordHash = false) {
-    const password = skipPasswordHash 
-      ? userData.password 
-      : await bcrypt.hash(userData.password, 10);
+    // Handle OAuth users (no password) or regular users
+    let password = '';
+    if (userData.password && userData.password.trim() !== '') {
+      password = skipPasswordHash 
+        ? userData.password 
+        : await bcrypt.hash(userData.password, 10);
+    }
+    
     const user = new User({
       ...userData,
-      password,
+      password: password || undefined, // Only set password if provided
     });
     return await user.save();
   }

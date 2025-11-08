@@ -4,7 +4,8 @@ import mongoose from 'mongoose';
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
+  password: { type: String, required: function() { return !this.googleId; } }, // Required only if not using Google OAuth
+  googleId: { type: String, unique: true, sparse: true }, // Google OAuth ID
   role: { type: String, enum: ['superadmin', 'admin', 'customer', 'investor', 'vendor', 'broker', 'user', 'partner'], default: 'customer' },
   status: { type: String, enum: ['active', 'inactive', 'pending'], default: 'pending' },
   verified: { type: Boolean, default: false },

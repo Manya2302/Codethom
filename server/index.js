@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from "express";
 import session from "express-session";
+import passport from "passport";
 import { registerRoutes } from "./routes.js";
 import { setupVite, serveStatic, log } from "./vite.js";
 import { connectDB } from "./db.js";
@@ -25,6 +26,10 @@ app.use(session({
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
   },
 }));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
 
 app.use((req, res, next) => {
   const start = Date.now();

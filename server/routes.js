@@ -493,6 +493,107 @@ export async function registerRoutes(app) {
     }
   });
 
+  // Get pincode boundary from Google Maps Geocoding API
+  app.get('/api/map/pincode-boundary', async (req, res) => {
+    try {
+      const { pincode } = req.query;
+      
+      if (!pincode) {
+        return res.status(400).json({ message: 'Pincode is required' });
+      }
+
+      // Import pincode data
+      const { ahmedabadPincodes } = await import('../client/src/data/ahmedabadPincodes.js');
+      
+      // ALWAYS prioritize stored coordinates first (they have wavy, curved boundaries)
+      const pincodeData = ahmedabadPincodes.find((p) => p.pincode === pincode);
+      if (pincodeData && pincodeData.coordinates) {
+        const boundary = pincodeData.coordinates.map(coord => ({
+          lat: coord[0],
+          lng: coord[1]
+        }));
+        return res.json({ 
+          boundary, 
+          source: 'stored',
+          center: pincodeData.center ? { lat: pincodeData.center[0], lng: pincodeData.center[1] } : null
+        });
+      }
+
+      // Only use Google Maps API if pincode not in stored list
+      if (!process.env.GOOGLE_MAPS_API_KEY) {
+        return res.status(404).json({ message: 'Pincode not found' });
+      }
+
+      // Use Google Maps Geocoding API as fallback
+      const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(pincode + ', Ahmedabad, Gujarat, India')}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+      
+      const response = await fetch(geocodeUrl);
+      const data = await response.json();
+
+      if (data.status === 'OK' && data.results && data.results.length > 0) {
+        const result = data.results[0];
+        const geometry = result.geometry;
+        
+        let boundary = null;
+        
+        // Try to get viewport bounds first (most accurate)
+        if (geometry.viewport) {
+          const ne = geometry.viewport.northeast;
+          const sw = geometry.viewport.southwest;
+          
+          // Create a rectangle boundary (simple fallback for pincodes not in stored list)
+          boundary = [
+            { lat: ne.lat, lng: sw.lng }, // Top-left
+            { lat: ne.lat, lng: ne.lng }, // Top-right
+            { lat: sw.lat, lng: ne.lng }, // Bottom-right
+            { lat: sw.lat, lng: sw.lng }, // Bottom-left
+            { lat: ne.lat, lng: sw.lng }, // Close polygon
+          ];
+        } else if (geometry.bounds) {
+          // Use bounds if viewport not available
+          const ne = geometry.bounds.northeast;
+          const sw = geometry.bounds.southwest;
+          
+          boundary = [
+            { lat: ne.lat, lng: sw.lng },
+            { lat: ne.lat, lng: ne.lng },
+            { lat: sw.lat, lng: ne.lng },
+            { lat: sw.lat, lng: sw.lng },
+            { lat: ne.lat, lng: sw.lng },
+          ];
+        } else if (geometry.location) {
+          // Fallback: create approximate boundary around location
+          const location = geometry.location;
+          const radius = 0.015; // Approximate radius in degrees (~1.5km)
+          
+          boundary = [
+            { lat: location.lat + radius, lng: location.lng - radius },
+            { lat: location.lat + radius, lng: location.lng + radius },
+            { lat: location.lat - radius, lng: location.lng + radius },
+            { lat: location.lat - radius, lng: location.lng - radius },
+            { lat: location.lat + radius, lng: location.lng - radius },
+          ];
+        }
+
+        if (boundary) {
+          return res.json({ 
+            boundary, 
+            source: 'google', 
+            center: geometry.location || { lat: 0, lng: 0 }
+          });
+        }
+      } else {
+        // Log Google Maps API errors for debugging
+        console.error('Google Maps Geocoding API error:', data.status, data.error_message || 'Unknown error');
+      }
+
+      return res.status(404).json({ message: 'Pincode not found' });
+    } catch (error) {
+      console.error('Error fetching pincode boundary:', error);
+      res.status(500).json({ message: 'Failed to fetch pincode boundary', error: error.message });
+    }
+  });
+
   // Reverse geocoding - get address and pincode from coordinates
   app.get('/api/map/reverse-geocode', async (req, res) => {
     try {
@@ -510,71 +611,94 @@ export async function registerRoutes(app) {
         return res.status(400).json({ message: 'Invalid coordinates' });
       }
 
-      // Use Nominatim (OpenStreetMap) reverse geocoding API
-      // Add delay to respect rate limits (1 request per second)
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1&zoom=18`,
-        {
-          headers: {
-            'User-Agent': 'TerriSmart/1.0 (contact@terrismart.com)',
-            'Accept': 'application/json',
-            'Accept-Language': 'en-US,en;q=0.9'
-          }
-        }
-      );
-
-      // Check response status first
-      if (!response.ok) {
-        let errorMessage = 'Failed to fetch address from coordinates. Please enter manually.';
+      // Use Google Maps Geocoding API if available, otherwise fallback to Nominatim
+      if (process.env.GOOGLE_MAPS_API_KEY) {
         try {
+          const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+          const response = await fetch(geocodeUrl);
+          const data = await response.json();
+
+          if (data.status === 'OK' && data.results && data.results.length > 0) {
+            const result = data.results[0];
+            const address = result.formatted_address || '';
+            
+            // Extract address components
+            const addressComponents = result.address_components || [];
+            let pincode = '';
+            let locality = '';
+            let city = '';
+            
+            addressComponents.forEach(component => {
+              const types = component.types || [];
+              if (types.includes('postal_code')) {
+                pincode = component.long_name;
+              }
+              if (types.includes('sublocality') || types.includes('sublocality_level_1')) {
+                locality = component.long_name;
+              }
+              if (types.includes('locality') || types.includes('administrative_area_level_2')) {
+                if (!locality) locality = component.long_name;
+                city = component.long_name;
+              }
+            });
+
+            return res.json({
+              address,
+              pincode,
+              locality: locality || city,
+              city
+            });
+          } else {
+            console.error('Google Geocoding API error:', data.status, data.error_message);
+            // Fallback to Nominatim
+          }
+        } catch (googleError) {
+          console.error('Google Geocoding API error:', googleError);
+          // Fallback to Nominatim
+        }
+      }
+
+      // Fallback to Nominatim (OpenStreetMap) reverse geocoding API
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1&zoom=18`,
+          {
+            headers: {
+              'User-Agent': 'TerriSmart/1.0 (contact@terrismart.com)',
+              'Accept': 'application/json',
+              'Accept-Language': 'en-US,en;q=0.9'
+            }
+          }
+        );
+
+        if (response.ok) {
           const contentType = response.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
-            const errorData = await response.json();
-            errorMessage = errorData.message || errorMessage;
-          } else {
-            const errorText = await response.text();
-            console.error('Nominatim error (non-JSON):', errorText.substring(0, 500));
+            const data = await response.json();
+            
+            if (data && !data.error) {
+              const address = data.display_name || '';
+              const addressParts = data.address || {};
+              const pincode = addressParts.postcode || '';
+              const locality = addressParts.suburb || addressParts.neighbourhood || addressParts.city_district || '';
+              const city = addressParts.city || addressParts.town || addressParts.village || '';
+
+              return res.json({
+                address,
+                pincode,
+                locality: locality || city,
+                city
+              });
+            }
           }
-        } catch (e) {
-          console.error('Error reading error response:', e);
         }
-        return res.status(response.status).json({ 
-          message: errorMessage 
-        });
+      } catch (nominatimError) {
+        console.error('Nominatim error:', nominatimError);
       }
 
-      // Check if response is JSON
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Nominatim returned non-JSON:', text.substring(0, 500));
-        return res.status(500).json({ 
-          message: 'Geocoding service returned invalid response. Please enter address manually.' 
-        });
-      }
-
-      const data = await response.json();
-      
-      // Check if we got valid data
-      if (!data || data.error) {
-        console.error('Nominatim API error:', data.error || 'Unknown error');
-        return res.status(500).json({ 
-          message: 'Could not find address for these coordinates. Please enter manually.' 
-        });
-      }
-      
-      // Extract address components
-      const address = data.display_name || '';
-      const addressParts = data.address || {};
-      const pincode = addressParts.postcode || '';
-      const locality = addressParts.suburb || addressParts.neighbourhood || addressParts.city_district || '';
-      const city = addressParts.city || addressParts.town || addressParts.village || '';
-
-      res.json({
-        address,
-        pincode,
-        locality: locality || city,
-        city
+      // If both fail, return error
+      return res.status(500).json({ 
+        message: 'Could not find address for these coordinates. Please enter manually.' 
       });
     } catch (error) {
       console.error('Reverse geocoding error:', error);

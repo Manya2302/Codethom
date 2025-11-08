@@ -1,194 +1,106 @@
-import React, { useEffect, useRef, useState } from "react";
-import { MapContainer, TileLayer, Polygon, useMap, Tooltip, Marker, Popup } from "react-leaflet";
-import L from "leaflet";
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { GoogleMap, LoadScript, Marker, InfoWindow, Polygon, Polyline, useJsApiLoader } from "@react-google-maps/api";
 import { ahmedabadPincodes } from "../data/ahmedabadPincodes";
-import { getUserCoordinates } from "../data/ahmedabadLocalities";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-// Import Leaflet CSS
-import "leaflet/dist/leaflet.css";
-
-// Fix for Leaflet default icon
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png",
-  iconUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png",
-  shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
-});
-
-// Custom red flag icon for investor users
-const createRedFlagIcon = () => {
-  return L.icon({
-    iconUrl: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
-    shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
-    shadowSize: [41, 41],
-    shadowAnchor: [12, 41],
-  });
+// Google Maps container style
+const mapContainerStyle = {
+  width: "100%",
+  height: "600px",
 };
 
-// Custom blue flag icon for vendor users
-const createBlueFlagIcon = () => {
-  return L.icon({
-    iconUrl: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
-    shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
-    shadowSize: [41, 41],
-    shadowAnchor: [12, 41],
-  });
+// Default center (Ahmedabad)
+const defaultCenter = {
+  lat: 23.0225,
+  lng: 72.5714,
 };
 
-// Custom yellow flag icon for broker users
-const createYellowFlagIcon = () => {
-  return L.icon({
-    iconUrl: "https://cdn-icons-png.flaticon.com/512/10796/10796995.png",
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
-    shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
-    shadowSize: [41, 41],
-    shadowAnchor: [12, 41],
-  });
-};
+// Libraries for Google Maps - defined outside component to prevent re-renders
+const libraries = ["places", "drawing", "geometry"];
 
-const redFlagIcon = createRedFlagIcon();
-const blueFlagIcon = createBlueFlagIcon();
-const yellowFlagIcon = createYellowFlagIcon();
-
-// Component to control map zoom and pan
-const MapController = ({ center, zoom }) => {
-  const map = useMap();
+// Marker icons based on role
+const getMarkerIcon = (role) => {
+  const baseIcon = "https://cdn-icons-png.flaticon.com/512/684/684908.png";
   
-  useEffect(() => {
-    if (center && zoom) {
-      map.setView(center, zoom, {
-        animate: true,
-        duration: 1.0,
-      });
-    }
-  }, [center, zoom, map]);
-
-  return null;
-};
-
-// Individual Pincode Polygon Component
-const PincodePolygon = ({ pincodeData, isSelected, onSelect }) => {
-  const polygonRef = useRef(null);
-
-  const defaultStyle = {
-    color: "#666",
-    fillColor: "transparent",
-    fillOpacity: 0,
-    weight: 1.5,
-    opacity: 0.7,
-  };
-
-  // Highlighted style for selected polygon - prominent red border with curved edges
-  const selectedStyle = {
-    color: "#dc2626", // Bright red border
-    fillColor: "#fee2e2", // Light red fill
-    fillOpacity: 0.3, // Semi-transparent red fill
-    weight: 4, // Thick border for visibility
-    opacity: 1,
-    dashArray: null, // Solid line
-  };
-
-  useEffect(() => {
-    if (polygonRef.current) {
-      const style = isSelected ? selectedStyle : defaultStyle;
-      polygonRef.current.setStyle(style);
-      // Force redraw
-      polygonRef.current.redraw();
-    }
-  }, [isSelected, pincodeData]);
-
-  return (
-    <Polygon
-      ref={polygonRef}
-      positions={pincodeData.coordinates}
-      pathOptions={isSelected ? selectedStyle : defaultStyle}
-      smoothFactor={1.0}
-      eventHandlers={{
-        click: () => onSelect && onSelect(pincodeData.pincode),
-        mouseover: (e) => {
-          if (!isSelected && polygonRef.current) {
-            polygonRef.current.setStyle({
-              ...defaultStyle,
-              color: "#3b82f6",
-              weight: 2,
-              opacity: 0.9,
-            });
-          } else if (isSelected && polygonRef.current) {
-            // Make it even more prominent on hover
-            polygonRef.current.setStyle({
-              ...selectedStyle,
-              weight: 5,
-              fillOpacity: 0.4,
-            });
-          }
-        },
-        mouseout: (e) => {
-          if (!isSelected && polygonRef.current) {
-            polygonRef.current.setStyle(defaultStyle);
-          } else if (isSelected && polygonRef.current) {
-            polygonRef.current.setStyle(selectedStyle);
-          }
-        },
-      }}
-    >
-      <Tooltip permanent={false} direction="center" className="pincode-tooltip">
-        <div className="text-center">
-          <strong>PIN: {pincodeData.pincode}</strong>
-          <br />
-          <span className="text-xs">{pincodeData.name}</span>
-        </div>
-      </Tooltip>
-    </Polygon>
-  );
-};
-
-// Component to handle map clicks
-const MapClickHandler = ({ onMapClick }) => {
-  const map = useMap();
-
-  useEffect(() => {
-    if (!onMapClick) return;
-
-    const handleClick = (e) => {
-      console.log('Map clicked at:', e.latlng);
-      if (onMapClick) {
-        onMapClick({
-          lat: e.latlng.lat,
-          lng: e.latlng.lng
-        });
-      }
+  // Return different colored markers based on role
+  if (role === 'investor') {
+    return {
+      url: baseIcon,
+      scaledSize: { width: 32, height: 32 },
+      fillColor: '#dc2626',
+      fillOpacity: 1,
     };
-
-    map.on('click', handleClick);
-    return () => {
-      map.off('click', handleClick);
+  } else if (role === 'vendor') {
+    return {
+      url: baseIcon,
+      scaledSize: { width: 32, height: 32 },
+      fillColor: '#2563eb',
+      fillOpacity: 1,
     };
-  }, [map, onMapClick]);
-
-  return null;
+  } else if (role === 'broker') {
+    return {
+      url: baseIcon,
+      scaledSize: { width: 32, height: 32 },
+      fillColor: '#eab308',
+      fillOpacity: 1,
+    };
+  }
+  
+  return {
+    url: baseIcon,
+    scaledSize: { width: 32, height: 32 },
+  };
 };
 
 export default function MapView({ selectedPincode: externalSelectedPincode, onPincodeSelect, onMapClick }) {
-  const [mapCenter, setMapCenter] = useState([23.0225, 72.5714]); // Ahmedabad center
+  const [mapCenter, setMapCenter] = useState(defaultCenter);
   const [mapZoom, setMapZoom] = useState(12);
   const [users, setUsers] = useState([]);
   const [searchPincode, setSearchPincode] = useState("");
   const [loading, setLoading] = useState(false);
   const [internalSelectedPincode, setInternalSelectedPincode] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [pincodeBoundary, setPincodeBoundary] = useState(null);
+  const mapRef = useRef(null);
   
   // Use external selectedPincode if provided, otherwise use internal state
   const selectedPincode = externalSelectedPincode !== undefined ? externalSelectedPincode : internalSelectedPincode;
+
+  // Load Google Maps API
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '', // You'll need to add this to .env
+    libraries: libraries,
+  });
+
+
+  // Fetch pincode boundary from server API (prioritizes stored wavy coordinates)
+  const fetchPincodeBoundary = useCallback(async (pincode) => {
+    // Always check stored coordinates first (they have wavy, curved boundaries)
+    const pincodeData = ahmedabadPincodes.find((p) => p.pincode === pincode);
+    if (pincodeData && pincodeData.coordinates) {
+      // Use stored wavy coordinates directly
+      return pincodeData.coordinates.map(coord => ({
+        lat: coord[0],
+        lng: coord[1]
+      }));
+    }
+    
+    // If not in stored list, try server API (which will use Google Maps as fallback)
+    try {
+      const response = await fetch(`/api/map/pincode-boundary?pincode=${pincode}`);
+      if (response.ok) {
+        const data = await response.json();
+        return data.boundary;
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching pincode boundary:', error);
+      return null;
+    }
+  }, []);
 
   // Fetch map registrations
   useEffect(() => {
@@ -205,7 +117,6 @@ export default function MapView({ selectedPincode: externalSelectedPincode, onPi
       const response = await fetch(url);
       if (response.ok) {
         const mapData = await response.json();
-        // Map registrations to display format
         const usersWithLocation = mapData
           .filter(registration => registration.latitude && registration.longitude)
           .map(registration => ({
@@ -230,23 +141,89 @@ export default function MapView({ selectedPincode: externalSelectedPincode, onPi
   };
 
   // Handle pincode search
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (searchPincode.trim()) {
       const pincode = searchPincode.trim();
       const pincodeData = ahmedabadPincodes.find((p) => p.pincode === pincode);
-      console.log('Searching for pincode:', pincode, 'Found:', pincodeData);
+      
       if (pincodeData) {
-        // Set the selected pincode (either internal or external)
+        // Set the selected pincode
         if (onPincodeSelect) {
           onPincodeSelect(pincode);
         } else {
           setInternalSelectedPincode(pincode);
         }
-        setMapCenter(pincodeData.center);
+        
+        // Update map center
+        setMapCenter({
+          lat: pincodeData.center[0],
+          lng: pincodeData.center[1]
+        });
         setMapZoom(14);
-        console.log('Pincode selected, boundary should render');
+        
+        // Fetch boundary from server API
+        try {
+          const boundary = await fetchPincodeBoundary(pincode);
+          if (boundary) {
+            setPincodeBoundary(boundary);
+          } else {
+            // Fallback to stored coordinates
+            const coords = pincodeData.coordinates.map(coord => ({
+              lat: coord[0],
+              lng: coord[1]
+            }));
+            setPincodeBoundary(coords);
+          }
+        } catch (error) {
+          console.error('Error fetching boundary:', error);
+          // Fallback to stored coordinates
+          const coords = pincodeData.coordinates.map(coord => ({
+            lat: coord[0],
+            lng: coord[1]
+          }));
+          setPincodeBoundary(coords);
+        }
       } else {
-        alert('Pincode not found. Please enter a valid Ahmedabad pincode.');
+        // Pincode not in stored list - try to fetch from Google Maps
+        try {
+          const response = await fetch(`/api/map/pincode-boundary?pincode=${pincode}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.boundary && data.boundary.length > 0) {
+              // Found via Google Maps
+              if (onPincodeSelect) {
+                onPincodeSelect(pincode);
+              } else {
+                setInternalSelectedPincode(pincode);
+              }
+              
+              // Use center from Google Maps or approximate center from boundary
+              if (data.center) {
+                setMapCenter({
+                  lat: data.center.lat,
+                  lng: data.center.lng
+                });
+              } else {
+                // Calculate center from boundary
+                const lats = data.boundary.map(b => b.lat);
+                const lngs = data.boundary.map(b => b.lng);
+                setMapCenter({
+                  lat: (Math.max(...lats) + Math.min(...lats)) / 2,
+                  lng: (Math.max(...lngs) + Math.min(...lngs)) / 2
+                });
+              }
+              setMapZoom(14);
+              setPincodeBoundary(data.boundary);
+            } else {
+              alert('Pincode not found. Please enter a valid Ahmedabad pincode.');
+            }
+          } else {
+            alert('Pincode not found. Please enter a valid Ahmedabad pincode.');
+          }
+        } catch (error) {
+          console.error('Error searching pincode:', error);
+          alert('Pincode not found. Please enter a valid Ahmedabad pincode.');
+        }
       }
     }
   };
@@ -256,19 +233,86 @@ export default function MapView({ selectedPincode: externalSelectedPincode, onPi
     if (selectedPincode) {
       const pincodeData = ahmedabadPincodes.find((p) => p.pincode === selectedPincode);
       if (pincodeData) {
-        setMapCenter(pincodeData.center);
+        setMapCenter({
+          lat: pincodeData.center[0],
+          lng: pincodeData.center[1]
+        });
         setMapZoom(14);
         setSearchPincode(selectedPincode);
+        
+        // Fetch boundary from server API
+        fetchPincodeBoundary(selectedPincode).then(boundary => {
+          if (boundary) {
+            setPincodeBoundary(boundary);
+          } else {
+            const coords = pincodeData.coordinates.map(coord => ({
+              lat: coord[0],
+              lng: coord[1]
+            }));
+            setPincodeBoundary(coords);
+          }
+        }).catch(() => {
+          const coords = pincodeData.coordinates.map(coord => ({
+            lat: coord[0],
+            lng: coord[1]
+          }));
+          setPincodeBoundary(coords);
+        });
       }
     } else {
-      // Only reset if explicitly cleared
       if (externalSelectedPincode === null || externalSelectedPincode === undefined) {
-        setMapCenter([23.0225, 72.5714]);
+        setMapCenter(defaultCenter);
         setMapZoom(12);
         setSearchPincode("");
+        setPincodeBoundary(null);
       }
     }
-  }, [selectedPincode, externalSelectedPincode]);
+  }, [selectedPincode, externalSelectedPincode, fetchPincodeBoundary]);
+
+  // Handle map click
+  const handleMapClick = (e) => {
+    if (onMapClick && e.latLng) {
+      onMapClick({
+        lat: e.latLng.lat(),
+        lng: e.latLng.lng()
+      });
+    }
+  };
+
+  // Handle map load
+  const onMapLoad = useCallback((map) => {
+    mapRef.current = map;
+  }, []);
+
+  if (loadError) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Territory Map</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center p-8 text-red-600">
+            Error loading Google Maps. Please check your API key configuration.
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!isLoaded) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Territory Map</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center p-8">
+            Loading Google Maps...
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>
@@ -289,6 +333,7 @@ export default function MapView({ selectedPincode: externalSelectedPincode, onPi
               variant="outline" 
               onClick={() => {
                 setSearchPincode("");
+                setPincodeBoundary(null);
                 if (onPincodeSelect) {
                   onPincodeSelect(null);
                 } else {
@@ -301,157 +346,157 @@ export default function MapView({ selectedPincode: externalSelectedPincode, onPi
           )}
         </div>
         <div className="relative w-full" style={{ height: "600px" }}>
-          <MapContainer
+          <GoogleMap
+            mapContainerStyle={mapContainerStyle}
             center={mapCenter}
             zoom={mapZoom}
-            style={{ height: "100%", width: "100%", zIndex: 0 }}
-            scrollWheelZoom={true}
+            onLoad={onMapLoad}
+            onClick={handleMapClick}
+            options={{
+              zoomControl: true,
+              streetViewControl: false,
+              mapTypeControl: false,
+              fullscreenControl: true,
+            }}
           >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-
-            <MapController center={mapCenter} zoom={mapZoom} />
-            <MapClickHandler onMapClick={onMapClick} />
-
-            {/* Render only the selected pincode polygon when searched */}
-            {selectedPincode && (() => {
-              const pincodeData = ahmedabadPincodes.find(
-                (p) => p.pincode === selectedPincode
-              );
-              console.log('Attempting to render boundary for pincode:', selectedPincode, 'Data:', pincodeData);
-              if (pincodeData && pincodeData.coordinates && pincodeData.coordinates.length > 0) {
-                console.log('Rendering polygon with coordinates:', pincodeData.coordinates);
-                return (
-                  <PincodePolygon
-                    key={`pincode-${pincodeData.pincode}-${selectedPincode}`}
-                    pincodeData={pincodeData}
-                    isSelected={true}
-                    onSelect={(pincode) => {
-                      if (onPincodeSelect) {
-                        onPincodeSelect(pincode);
-                      } else {
-                        setInternalSelectedPincode(pincode);
-                      }
-                    }}
-                  />
-                );
-              } else {
-                console.warn('Pincode data not found or invalid coordinates for:', selectedPincode);
-              }
-              return null;
-            })()}
+            {/* Render pincode boundary polygon with dashed red curved line */}
+            {pincodeBoundary && pincodeBoundary.length > 0 && (
+              <>
+                {/* Fill area with curved boundary */}
+                <Polygon
+                  paths={pincodeBoundary}
+                  options={{
+                    fillColor: "#fee2e2",
+                    fillOpacity: 0.2,
+                    strokeColor: "transparent",
+                    strokeOpacity: 0,
+                    strokeWeight: 0,
+                    clickable: false,
+                    draggable: false,
+                    editable: false,
+                    geodesic: false, // Set to false for straight lines between points (creates curves with many points)
+                    zIndex: 1,
+                  }}
+                />
+                {/* Dashed red border using Polyline - follows all coordinate points for curves */}
+                <Polyline
+                  path={[...pincodeBoundary, pincodeBoundary[0]]} // Close the path by adding first point at end
+                  options={{
+                    strokeColor: "transparent", // Hide base stroke, use only symbols
+                    strokeOpacity: 0,
+                    strokeWeight: 0,
+                    clickable: false,
+                    geodesic: false, // Use straight segments between points (creates smooth curves with many points)
+                    zIndex: 2,
+                    // Create dashed line pattern like Google Maps
+                    icons: [{
+                      icon: {
+                        path: 'M 0,0 8,0', // Small horizontal dash
+                        strokeColor: '#dc2626',
+                        strokeWeight: 3,
+                        strokeOpacity: 1,
+                        scale: 1
+                      },
+                      offset: '0%',
+                      repeat: '16px' // Space between dashes
+                    }]
+                  }}
+                />
+              </>
+            )}
 
             {/* Render user markers */}
-            {users.map((user, i) => {
+            {users.map((user) => {
               const isInvestor = user.role === 'investor';
               const isVendor = user.role === 'vendor';
               const isBroker = user.role === 'broker';
-              
-              let userIcon = undefined;
-              if (isInvestor) {
-                userIcon = redFlagIcon;
-              } else if (isVendor) {
-                userIcon = blueFlagIcon;
-              } else if (isBroker) {
-                userIcon = yellowFlagIcon;
-              }
-
-              const markerIcon = L.icon({
-                iconUrl: "https://cdn-icons-png.flaticon.com/512/684/684908.png",
-                iconSize: [32, 32],
-                iconAnchor: [16, 32],
-                popupAnchor: [0, -32],
-                shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
-                shadowSize: [41, 41],
-                shadowAnchor: [12, 41],
-              });
 
               return (
                 <Marker
-                  key={`user-${i}`}
-                  position={[user.latitude, user.longitude]}
-                  icon={markerIcon}
-                  eventHandlers={{
-                    add: (e) => {
-                      if (e.target._icon) {
-                        if (isVendor) {
-                          e.target._icon.style.filter = 'hue-rotate(200deg) saturate(1.5) brightness(1.1)';
-                        } else if (isBroker) {
-                          e.target._icon.style.filter = 'hue-rotate(45deg) saturate(1.5) brightness(1.1)';
-                        } else if (isInvestor) {
-                          e.target._icon.style.filter = 'hue-rotate(0deg) saturate(1.5) brightness(1.1)';
-                        }
-                      }
-                    }
+                  key={`user-${user._id}`}
+                  position={{
+                    lat: user.latitude,
+                    lng: user.longitude
                   }}
-                >
-                  <Popup>
-                    <div style={{ minWidth: "200px" }}>
-                      <b style={{ 
-                        fontSize: "16px", 
-                        color: isInvestor ? "#dc2626" : isVendor ? "#2563eb" : isBroker ? "#eab308" : "#666" 
-                      }}>
-                        {user.name}
-                      </b>
-                      <br />
-                      <span style={{ fontSize: "12px", color: "#666" }}>
-                        Role: {user.role}
-                      </span>
-                      <br />
-                      <br />
-                      {user.email && (
-                        <>
-                          <strong>Email:</strong> {user.email}
-                          <br />
-                        </>
-                      )}
-                      {(user.streetAddress || user.address) && (
-                        <>
-                          <strong>Address:</strong> {user.streetAddress || user.address}
-                          <br />
-                        </>
-                      )}
-                      {user.locality && (
-                        <>
-                          <strong>Locality:</strong> {user.locality}
-                          <br />
-                        </>
-                      )}
-                      {user.pincode && (
-                        <>
-                          <strong>Pincode:</strong> {user.pincode}
-                          <br />
-                        </>
-                      )}
-                      <br />
-                      <div style={{ 
-                        background: isInvestor ? "#fee2e2" : isVendor ? "#dbeafe" : isBroker ? "#fef9c3" : "#f3f4f6", 
-                        padding: "8px", 
-                        borderRadius: "4px",
-                        marginTop: "8px"
-                      }}>
-                        <strong style={{ 
-                          color: isInvestor ? "#dc2626" : isVendor ? "#2563eb" : isBroker ? "#eab308" : "#666" 
-                        }}>
-                          {isInvestor ? "🏢 Investor" : isVendor ? "🏪 Vendor" : isBroker ? "🤝 Broker" : user.role}
-                        </strong>
-                      </div>
-                    </div>
-                  </Popup>
-                  <Tooltip permanent={false} direction="top">
-                    <strong>{user.role}</strong>
-                    <br />
-                    {user.name}
-                  </Tooltip>
-                </Marker>
+                  icon={getMarkerIcon(user.role)}
+                  onClick={() => setSelectedUser(user)}
+                />
               );
             })}
-          </MapContainer>
+
+            {/* Info Window for selected user */}
+            {selectedUser && (
+              <InfoWindow
+                position={{
+                  lat: selectedUser.latitude,
+                  lng: selectedUser.longitude
+                }}
+                onCloseClick={() => setSelectedUser(null)}
+              >
+                <div style={{ minWidth: "200px", padding: "8px" }}>
+                  <b style={{ 
+                    fontSize: "16px", 
+                    color: selectedUser.role === 'investor' ? "#dc2626" : 
+                           selectedUser.role === 'vendor' ? "#2563eb" : 
+                           selectedUser.role === 'broker' ? "#eab308" : "#666" 
+                  }}>
+                    {selectedUser.name}
+                  </b>
+                  <br />
+                  <span style={{ fontSize: "12px", color: "#666" }}>
+                    Role: {selectedUser.role}
+                  </span>
+                  <br />
+                  <br />
+                  {selectedUser.email && (
+                    <>
+                      <strong>Email:</strong> {selectedUser.email}
+                      <br />
+                    </>
+                  )}
+                  {(selectedUser.streetAddress || selectedUser.address) && (
+                    <>
+                      <strong>Address:</strong> {selectedUser.streetAddress || selectedUser.address}
+                      <br />
+                    </>
+                  )}
+                  {selectedUser.locality && (
+                    <>
+                      <strong>Locality:</strong> {selectedUser.locality}
+                      <br />
+                    </>
+                  )}
+                  {selectedUser.pincode && (
+                    <>
+                      <strong>Pincode:</strong> {selectedUser.pincode}
+                      <br />
+                    </>
+                  )}
+                  <br />
+                  <div style={{ 
+                    background: selectedUser.role === 'investor' ? "#fee2e2" : 
+                               selectedUser.role === 'vendor' ? "#dbeafe" : 
+                               selectedUser.role === 'broker' ? "#fef9c3" : "#f3f4f6", 
+                    padding: "8px", 
+                    borderRadius: "4px",
+                    marginTop: "8px"
+                  }}>
+                    <strong style={{ 
+                      color: selectedUser.role === 'investor' ? "#dc2626" : 
+                             selectedUser.role === 'vendor' ? "#2563eb" : 
+                             selectedUser.role === 'broker' ? "#eab308" : "#666" 
+                    }}>
+                      {selectedUser.role === 'investor' ? "🏢 Investor" : 
+                       selectedUser.role === 'vendor' ? "🏪 Vendor" : 
+                       selectedUser.role === 'broker' ? "🤝 Broker" : selectedUser.role}
+                    </strong>
+                  </div>
+                </div>
+              </InfoWindow>
+            )}
+          </GoogleMap>
         </div>
       </CardContent>
     </Card>
   );
 }
-

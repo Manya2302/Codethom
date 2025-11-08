@@ -25,6 +25,7 @@ import VendorDashboard from "@/pages/VendorDashboard";
 import BrokerDashboard from "@/pages/BrokerDashboard";
 import Payment from "@/pages/Payment";
 import MapViewPage from "@/pages/MapViewPage";
+import GoogleOAuthComplete from "@/pages/GoogleOAuthComplete";
 
 function Router() {
   return (
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/signup" component={SignUp} />
       <Route path="/signin" component={SignIn} />
+      <Route path="/google-oauth-complete" component={GoogleOAuthComplete} />
       <Route path="/verify-otp" component={OTPVerify} />
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />

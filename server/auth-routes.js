@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { storage } from './storage.js';
 import bcrypt from 'bcryptjs';
 import { sendOTPEmail, sendReraConfirmationEmail } from './email-service.js';
+import passport from 'passport';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 
 const router = Router();
 
@@ -615,17 +617,231 @@ router.post('/auth/verify-rera', async (req, res) => {
   }
 });
 
-// Google OAuth routes (placeholder for now - requires Google credentials)
-router.get('/auth/google', (req, res) => {
-  res.status(501).json({ 
-    message: 'Google OAuth not configured yet. Please set up GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.' 
+// Configure Google OAuth Strategy
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: `${process.env.APP_URL || 'http://localhost:5000'}/api/auth/google/callback`
+  }, async (accessToken, refreshToken, profile, done) => {
+    try {
+      // Return profile data - user creation will happen in callback route
+      const profileData = {
+        googleId: profile.id,
+        name: profile.displayName || (profile.name?.givenName + ' ' + profile.name?.familyName) || 'User',
+        email: profile.emails[0].value,
+        picture: profile.photos && profile.photos[0] ? profile.photos[0].value : null
+      };
+      return done(null, profileData);
+    } catch (error) {
+      console.error('Google OAuth error:', error);
+      return done(error, null);
+    }
+  }));
+
+  // Serialize user for session
+  passport.serializeUser((user, done) => {
+    done(null, user._id.toString());
   });
+
+  // Deserialize user from session
+  passport.deserializeUser(async (id, done) => {
+    try {
+      const user = await storage.getUser(id);
+      done(null, user);
+    } catch (error) {
+      done(error, null);
+    }
+  });
+
+  // Google OAuth routes
+  router.get('/auth/google', passport.authenticate('google', {
+    scope: ['profile', 'email']
+  }));
+
+  router.get('/auth/google/callback', 
+    passport.authenticate('google', { failureRedirect: '/signin?error=google_auth_failed', session: false }),
+    async (req, res) => {
+      try {
+        // Check if user already exists
+        const existingUser = await storage.getUserByEmail(req.user.email);
+        
+        if (existingUser) {
+          // User exists, log them in
+          req.session.userId = existingUser._id.toString();
+          req.session.userRole = existingUser.role;
+          // Update Google ID if not set
+          if (!existingUser.googleId) {
+            await storage.updateUser(existingUser._id, {
+              googleId: req.user.googleId,
+              isEmailVerified: true,
+              verified: true
+            });
+          }
+          
+          // Role-based dashboard redirect (same logic as regular sign-in)
+          let dashboardPath = '/dashboard';
+          const role = existingUser.role;
+          
+          if (role === 'superadmin') {
+            dashboardPath = '/superadmin/dashboard';
+          } else if (role === 'admin') {
+            dashboardPath = '/admin/dashboard';
+          } else if (role === 'partner') {
+            dashboardPath = '/partner/dashboard';
+          } else if (role === 'customer' || role === 'investor' || role === 'vendor' || role === 'broker') {
+            dashboardPath = `/dashboard/${role}`;
+          }
+          
+          return res.redirect(dashboardPath);
+        }
+        
+        // New user - store Google profile in session and redirect to completion page
+        req.session.googleProfile = {
+          googleId: req.user.googleId,
+          name: req.user.name,
+          email: req.user.email,
+          picture: req.user.picture || null
+        };
+        
+        res.redirect('/google-oauth-complete');
+      } catch (error) {
+        console.error('Google OAuth callback error:', error);
+        res.redirect('/signin?error=google_auth_failed');
+      }
+    }
+  );
+} else {
+  // Google OAuth routes (placeholder if not configured)
+  router.get('/auth/google', (req, res) => {
+    res.status(501).json({ 
+      message: 'Google OAuth not configured yet. Please set up GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET environment variables.' 
+    });
+  });
+
+  router.get('/auth/google/callback', (req, res) => {
+    res.status(501).json({ 
+      message: 'Google OAuth not configured yet.' 
+    });
+  });
+}
+
+// Get Google OAuth profile from session (for completion page)
+router.get('/auth/google/profile', (req, res) => {
+  if (!req.session.googleProfile) {
+    return res.status(404).json({ message: 'No Google profile found. Please sign in with Google again.' });
+  }
+  res.json(req.session.googleProfile);
 });
 
-router.get('/auth/google/callback', (req, res) => {
-  res.status(501).json({ 
-    message: 'Google OAuth not configured yet.' 
-  });
+// Complete Google OAuth registration
+router.post('/auth/google/complete', async (req, res) => {
+  try {
+    const { role, password, confirmPassword, reraId } = req.body;
+
+    // Check if Google profile exists in session
+    if (!req.session.googleProfile) {
+      return res.status(400).json({ message: 'Google profile not found. Please sign in with Google again.' });
+    }
+
+    const { googleId, name, email } = req.session.googleProfile;
+
+    // Validate required fields
+    if (!role || !password || !confirmPassword) {
+      return res.status(400).json({ message: 'Role, password, and confirm password are required' });
+    }
+
+    // Validate role
+    const validRoles = ['customer', 'investor', 'vendor', 'broker'];
+    if (!validRoles.includes(role.toLowerCase())) {
+      return res.status(400).json({ message: 'Invalid role selected' });
+    }
+
+    // Validate password match
+    if (password !== confirmPassword) {
+      return res.status(400).json({ message: 'Passwords do not match' });
+    }
+
+    // Check if user already exists
+    const existingUser = await storage.getUserByEmail(email);
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email already registered' });
+    }
+
+    // For Vendor and Broker: Validate RERA ID format
+    if (role.toLowerCase() === 'vendor' || role.toLowerCase() === 'broker') {
+      if (!reraId) {
+        return res.status(400).json({ message: 'RERA ID is required for Vendors and Brokers' });
+      }
+
+      if (!validateReraIdFormat(reraId)) {
+        return res.status(400).json({ 
+          message: 'Invalid RERA ID format. Please enter a valid RERA registration number.' 
+        });
+      }
+
+      // Create verification record for vendor/broker (same as regular signup)
+      await storage.createVerification({
+        name,
+        email,
+        password: await bcrypt.hash(password, 10),
+        role: role.toLowerCase(),
+        reraId,
+        phone: '',
+        company: '',
+        status: 'pending'
+      });
+
+      // Clear Google profile from session
+      delete req.session.googleProfile;
+
+      res.json({
+        message: 'Account registration submitted. Your account is pending admin verification. You will be notified via email.',
+        requiresManualReview: true
+      });
+    } else {
+      // For Customer and Investor: Create user directly and send OTP
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const user = await storage.createUser({
+        name,
+        email,
+        password: hashedPassword,
+        role: role.toLowerCase(),
+        googleId,
+        isEmailVerified: true,
+        verified: false, // Will be verified after OTP
+        status: 'pending'
+      }, true); // Skip password hash since we already hashed it
+
+      // Generate and send OTP
+      const otpCode = generateOTP();
+      const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+      await storage.createOTP({
+        email,
+        code: otpCode,
+        type: 'signup',
+        expiresAt: otpExpiresAt
+      });
+
+      const emailSent = await sendOTPEmail(email, otpCode, 'signup');
+      if (!emailSent) {
+        console.log(`Failed to send OTP email to ${email}`);
+      }
+
+      // Clear Google profile from session
+      delete req.session.googleProfile;
+
+      res.json({
+        message: 'Account created successfully. Please verify your email to continue.',
+        requiresOTP: true,
+        email: email
+      });
+    }
+  } catch (error) {
+    console.error('Google OAuth completion error:', error);
+    res.status(500).json({ message: error.message || 'Internal server error' });
+  }
 });
 
 // Get users with pincode for map display
